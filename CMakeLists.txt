@@ -13,6 +13,7 @@ add_executable(water_sim
     src/main.cpp
     src/shader_utils.cpp
     src/grid.cpp
+    src/camera.cpp
 )
 
 target_link_libraries(water_sim

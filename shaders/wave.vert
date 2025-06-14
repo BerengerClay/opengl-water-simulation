@@ -3,34 +3,45 @@
 layout(location = 0) in vec3 position;
 
 uniform float time;
-uniform float amplitude;
-uniform float frequency;
-
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
+
+const int NUM_WAVES = 3;
+uniform float amplitude[NUM_WAVES];
+uniform float frequency[NUM_WAVES];
+uniform float speed[NUM_WAVES];
+uniform float steepness[NUM_WAVES];
+uniform vec2 direction[NUM_WAVES];
 
 out vec3 fragPos;
 out vec3 fragNormal;
 
 void main() {
-    // Position animée (hauteur)
     vec3 pos = position;
-    float wave = amplitude * sin(frequency * (pos.x + pos.z) + time);
-    pos.y += wave;
+    vec3 normal = vec3(0.0, 1.0, 0.0);
+    vec2 displacement = vec2(0.0);
+    float height = 0.0;
 
-    // Calcul analytique de la normale via gradient de la sinusoïde
-    float dWave_dx = amplitude * frequency * cos(frequency * (pos.x + pos.z) + time);
-    float dWave_dz = amplitude * frequency * cos(frequency * (pos.x + pos.z) + time);
+    for (int i = 0; i < NUM_WAVES; ++i) {
+        float phase = dot(direction[i], pos.xz) * frequency[i] + time * speed[i];
+        float wave = sin(phase);
+        float cosWave = cos(phase);
 
-    // Les dérivées partielles donnent le vecteur tangents dans x et z
-    vec3 tangentX = normalize(vec3(1.0, dWave_dx, 0.0));
-    vec3 tangentZ = normalize(vec3(0.0, dWave_dz, 1.0));
-    vec3 normal = normalize(cross(tangentZ, tangentX)); // produit vectoriel des tangentes
+        // Déplacement latéral et vertical
+        displacement += direction[i] * (steepness[i] * amplitude[i] * cosWave);
+        height += amplitude[i] * wave;
 
-    // Transformation et passage au fragment shader
-    fragNormal = mat3(transpose(inverse(model))) * normal;
+        // Normale approximée
+        normal.x += -direction[i].x * frequency[i] * amplitude[i] * cosWave;
+        normal.y += steepness[i] * frequency[i] * amplitude[i] * sin(phase);
+        normal.z += -direction[i].y * frequency[i] * amplitude[i] * cosWave;
+    }
+
+    pos.xz += displacement;
+    pos.y += height;
+
+    fragNormal = mat3(transpose(inverse(model))) * normalize(normal);
     fragPos = vec3(model * vec4(pos, 1.0));
-
     gl_Position = projection * view * vec4(fragPos, 1.0);
 }
