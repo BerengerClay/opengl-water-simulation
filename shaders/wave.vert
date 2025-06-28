@@ -1,47 +1,36 @@
 #version 330 core
+layout(location = 0) in vec3 aPos;
 
-layout(location = 0) in vec3 position;
-
-uniform float time;
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
-const int NUM_WAVES = 3;
-uniform float amplitude[NUM_WAVES];
-uniform float frequency[NUM_WAVES];
-uniform float speed[NUM_WAVES];
-uniform float steepness[NUM_WAVES];
-uniform vec2 direction[NUM_WAVES];
+uniform sampler2D heightMap;
+uniform int     gridSize;
+uniform float   step;
+uniform float   heightScale;  // <-- nouveau
 
-out vec3 fragPos;
-out vec3 fragNormal;
+out vec3 FragPos;
+out vec3 Normal;
 
 void main() {
-    vec3 pos = position;
-    vec3 normal = vec3(0.0, 1.0, 0.0);
-    vec2 displacement = vec2(0.0);
-    float height = 0.0;
+    // coordonnées UV [0,1]
+    vec2 uv = (aPos.xz / (step * gridSize)) + 0.5;
 
-    for (int i = 0; i < NUM_WAVES; ++i) {
-        float phase = dot(direction[i], pos.xz) * frequency[i] + time * speed[i];
-        float wave = sin(phase);
-        float cosWave = cos(phase);
+    // récupère la hauteur (peut être négative)
+    float h = texture(heightMap, uv).r;
+    // applique l'échelle
+    vec3 pos = vec3(aPos.x, h * heightScale, aPos.z);
 
-        // Déplacement latéral et vertical
-        displacement += direction[i] * (steepness[i] * amplitude[i] * cosWave);
-        height += amplitude[i] * wave;
+    // calcul normal (approx par differences)
+    float du = 1.0 / float(gridSize);
+    float hl = texture(heightMap, uv + vec2(-du,0)).r;
+    float hr = texture(heightMap, uv + vec2( du,0)).r;
+    float hd = texture(heightMap, uv + vec2(0,-du)).r;
+    float hu = texture(heightMap, uv + vec2(0, du)).r;
+    vec3 n = normalize(vec3((hl-hr)*heightScale, 2.0*step, (hd-hu)*heightScale));
 
-        // Normale approximée
-        normal.x += -direction[i].x * frequency[i] * amplitude[i] * cosWave;
-        normal.y += steepness[i] * frequency[i] * amplitude[i] * sin(phase);
-        normal.z += -direction[i].y * frequency[i] * amplitude[i] * cosWave;
-    }
-
-    pos.xz += displacement;
-    pos.y += height;
-
-    fragNormal = mat3(transpose(inverse(model))) * normalize(normal);
-    fragPos = vec3(model * vec4(pos, 1.0));
-    gl_Position = projection * view * vec4(fragPos, 1.0);
+    FragPos = vec3(model * vec4(pos, 1.0));
+    Normal  = mat3(transpose(inverse(model))) * n;
+    gl_Position = projection * view * model * vec4(pos,1.0);
 }
