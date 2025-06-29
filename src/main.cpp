@@ -13,6 +13,7 @@
 
 #include <iostream>
 #include <vector>
+#include <algorithm>
 
 // Macro pour capturer les erreurs OpenGL
 #define TEST_OPENGL_ERROR()                                      \
@@ -29,7 +30,7 @@ static const int N = 128;
 static const float STEP = 1.0f;
 static const float DT = 0.016f;
 static const float DAMPING = 0.995f;
-static const float IMPACT_AMP = -0.3f;
+static const float IMPACT_AMP = -2.0f;
 static const int IMPACT_FRAMES = 20;
 static const float DROP_RADIUS = 5.0f;
 static const float HEIGHT_SCALE = 1.5f;
@@ -56,6 +57,8 @@ glm::vec3 dropPos;
 
 // --- Boat position ---
 glm::vec3 boatPos(0.0f, 0.0f, 0.0f);
+glm::vec3 prevBoatPos = boatPos;
+float boatHeading = 0.0f; // in radians, 0 = facing +Z
 
 // Forward declarations
 void init_glut(int &argc, char **argv);
@@ -69,6 +72,7 @@ void display();
 void idle();
 void mouse_button(int button, int state, int x, int y);
 void mouse_move(int x, int y);
+void keyboard(unsigned char key, int x, int y);
 
 // ---- Main ----
 int main(int argc, char **argv)
@@ -101,6 +105,7 @@ void init_glut(int &argc, char **argv)
   glutIdleFunc(idle);
   glutMouseFunc(mouse_button);
   glutMotionFunc(mouse_move);
+  glutKeyboardFunc(keyboard); // Add this line
 }
 
 // ---- GLEW initialization ----
@@ -243,6 +248,15 @@ void display()
   else
     impacting = false;
 
+  if (boatPos != prevBoatPos) {
+    int bx = int((boatPos.x / STEP) + N / 2.0f);
+    int bz = int((boatPos.z / STEP) + N / 2.0f);
+    float boatWaveAmp = -0.5f; // negative for a "dip", positive for a "bump"
+    int boatWaveRadius = 3;    // adjust for effect size
+    sim.addDrop(bx, bz, boatWaveAmp, boatWaveRadius);
+    prevBoatPos = boatPos;
+  }
+  
   // Update simulation
   sim.update();
 
@@ -338,31 +352,53 @@ void display()
   int bx = int((boatPos.x / STEP) + N / 2.0f);
   int bz = int((boatPos.z / STEP) + N / 2.0f);
   const auto& heights = sim.getHeight();
-  float hC = heights[bz * (N + 1) + bx];
-  float hL = heights[bz * (N + 1) + std::max(bx - 1, 0)];
-  float hR = heights[bz * (N + 1) + std::min(bx + 1, N)];
-  float hF = heights[std::min(bz + 1, N) * (N + 1) + bx];
-  float hB = heights[std::max(bz - 1, 0) * (N + 1) + bx];
 
-  float dx = (hR - hL) * HEIGHT_SCALE / (2.0f * STEP);
-  float dz = (hF - hB) * HEIGHT_SCALE / (2.0f * STEP);
+  // Compute local axes
+  float c = cos(boatHeading);
+  float s = sin(boatHeading);
+  glm::vec2 forward(s, c);
+  glm::vec2 right(c, -s);
+
+  // Center
+  float hC = heights[bz * (N + 1) + bx];
+
+  // Forward/back (local X)
+  int bxF = int((boatPos.x + STEP * forward.x) / STEP + N / 2.0f);
+  int bzF = int((boatPos.z + STEP * forward.y) / STEP + N / 2.0f);
+  int bxB = int((boatPos.x - STEP * forward.x) / STEP + N / 2.0f);
+  int bzB = int((boatPos.z - STEP * forward.y) / STEP + N / 2.0f);
+  float hF = heights[std::clamp(bzF, 0, N) * (N + 1) + std::clamp(bxF, 0, N)];
+  float hB = heights[std::clamp(bzB, 0, N) * (N + 1) + std::clamp(bxB, 0, N)];
+
+  // Right/left (local Z)
+  int bxR = int((boatPos.x + STEP * right.x) / STEP + N / 2.0f);
+  int bzR = int((boatPos.z + STEP * right.y) / STEP + N / 2.0f);
+  int bxL = int((boatPos.x - STEP * right.x) / STEP + N / 2.0f);
+  int bzL = int((boatPos.z - STEP * right.y) / STEP + N / 2.0f);
+  float hR = heights[std::clamp(bzR, 0, N) * (N + 1) + std::clamp(bxR, 0, N)];
+  float hL = heights[std::clamp(bzL, 0, N) * (N + 1) + std::clamp(bxL, 0, N)];
+
+  // Compute local pitch and roll
+  float dx = (hR - hL) * HEIGHT_SCALE / (2.0f * STEP); // roll
+  float dz = (hF - hB) * HEIGHT_SCALE / (2.0f * STEP); // pitch
 
   float maxAngle = glm::radians(20.0f);
-  float roll  = glm::clamp(-dx, -maxAngle, maxAngle);
-  float pitch = glm::clamp(dz, -maxAngle, maxAngle);
+  float roll  = glm::clamp(dx, -maxAngle, maxAngle);
+  float pitch = glm::clamp(-dz, -maxAngle, maxAngle);
 
   // Hull parameters
-  float hullLength = 8.0f;
-  float hullHeight = 2.0f;
-  float hullWidth  = 2.5f;
+  float hullLength = 2.5f;
+  float hullHeight = 4.0f;   // Increased from 2.0f to 4.0f for more height
+  float hullWidth  = 8.0f;
 
   // Cabin parameters
   float cabinLength = 1.0f;
-  float cabinHeight = 1.0f;
+  float cabinHeight = 2.0f;  // Increased from 1.0f to 2.0f for a taller cabin
   float cabinWidth  = 1.0f;
 
   // --- Boat transform (hull) ---
   glm::mat4 boatBase = glm::translate(glm::mat4(1.0f), glm::vec3(boatPos.x, hC * HEIGHT_SCALE, boatPos.z))
+      * glm::rotate(glm::mat4(1.0f), boatHeading, glm::vec3(0, 1, 0)) // heading
       * glm::rotate(glm::mat4(1.0f), pitch, glm::vec3(1, 0, 0))
       * glm::rotate(glm::mat4(1.0f), roll,  glm::vec3(0, 0, 1));
 
@@ -380,10 +416,10 @@ void display()
 
   // --- Cabin: place it on top of the hull in local space ---
   float cabinYOffset = (hullHeight + cabinHeight) * 0.5f; // sits on top
-  float cabinXOffset = 1.5f; // forward on the boat
+  float cabinZOffset = 1.5f; // forward on the boat
 
   glm::mat4 cabinModel = boatBase
-      * glm::translate(glm::mat4(1.0f), glm::vec3(cabinXOffset, cabinYOffset, 0.0f))
+      * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, cabinYOffset, cabinZOffset))
       * glm::scale(glm::mat4(1.0f), glm::vec3(cabinLength, cabinHeight, cabinWidth));
 
   glUniformMatrix4fv(glGetUniformLocation(dropProgram, "model"), 1, GL_FALSE, glm::value_ptr(cabinModel));
@@ -460,4 +496,29 @@ void mouse_move(int x, int y)
   lastX = x;
   lastY = y;
   camera.update(dx * 0.2f, dy * 0.2f, 0.0f);
+}
+
+// ---- Keyboard input callback ----
+void keyboard(unsigned char key, int x, int y)
+{
+    float moveStep = 0.5f;
+    float turnStep = glm::radians(5.0f); // 5 degrees per press
+
+    switch (key)
+    {
+        case 'w': // forward
+            boatPos.x += moveStep * sin(boatHeading);
+            boatPos.z += moveStep * cos(boatHeading);
+            break;
+        case 's': // backward
+            boatPos.x -= moveStep * sin(boatHeading);
+            boatPos.z -= moveStep * cos(boatHeading);
+            break;
+        case 'a': // turn left
+            boatHeading += turnStep;
+            break;
+        case 'd': // turn right
+            boatHeading -= turnStep;
+            break;
+    }
 }

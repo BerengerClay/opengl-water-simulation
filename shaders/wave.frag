@@ -30,8 +30,8 @@ void main() {
     vec3 foamColor = vec3(1.0);
 
 
-    vec3 color = mix(baseColor * diff + specColor * spec + fresColor * fresnel, foamColor, foam);
-    //vec3 color = baseColor * diff + specColor * spec + fresColor * fresnel;
+    //vec3 color = mix(baseColor * diff + specColor * spec + fresColor * fresnel, foamColor, foam);
+    vec3 color = baseColor * diff + specColor * spec + fresColor * fresnel;
 
     FragColor = vec4(color, 0.6);
 }
