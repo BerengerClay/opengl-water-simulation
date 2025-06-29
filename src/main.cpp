@@ -41,7 +41,7 @@ Simulation sim(N, STEP, DT, DAMPING);
 GLuint waterProgram = 0, dropProgram = 0;
 GLuint waterVAO = 0, waterVBO = 0;
 int waterCount = 0;
-GLuint heightTex = 0;
+GLuint heightTex = 0, velocityTex = 0;
 
 GLuint sphereVAO = 0, sphereVBO = 0, sphereEBO = 0;
 int sphereCount = 0;
@@ -53,6 +53,9 @@ int lastX = 0, lastY = 0;
 bool impacting = false;
 int impactFrame = 0;
 glm::vec3 dropPos;
+
+// --- Boat position ---
+glm::vec3 boatPos(0.0f, 0.0f, 0.0f);
 
 // Forward declarations
 void init_glut(int &argc, char **argv);
@@ -141,6 +144,14 @@ void init_water_mesh_and_texture()
   TEST_OPENGL_ERROR();
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   TEST_OPENGL_ERROR();
+  glBindTexture(GL_TEXTURE_2D, 0);
+
+  glGenTextures(1, &velocityTex);
+  glBindTexture(GL_TEXTURE_2D, velocityTex);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, N + 1, N + 1, 0,
+               GL_RED, GL_FLOAT, nullptr);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 
@@ -243,6 +254,14 @@ void display()
   TEST_OPENGL_ERROR();
   glBindTexture(GL_TEXTURE_2D, 0);
 
+  // Upload velocity map
+  glBindTexture(GL_TEXTURE_2D, velocityTex);
+  TEST_OPENGL_ERROR();
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, N + 1, N + 1,
+                  GL_RED, GL_FLOAT, sim.getVelocity().data());
+  TEST_OPENGL_ERROR();
+  glBindTexture(GL_TEXTURE_2D, 0);
+
   // Clear
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -274,13 +293,25 @@ void display()
   glUniform1i(locH, 0);
   glUniform1f(locS, HEIGHT_SCALE);
 
+  float dropProgress = (impactFrame < IMPACT_FRAMES) ? (impactFrame / float(IMPACT_FRAMES)) : 1.0f;
+  glUniform1f(glGetUniformLocation(waterProgram, "dropProgress"), dropProgress);
+
+  // Bind textures
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, heightTex);
+  glUniform1i(glGetUniformLocation(waterProgram, "heightMap"), 0);
 
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, velocityTex);
+  glUniform1i(glGetUniformLocation(waterProgram, "velocityMap"), 1);
+
+  glUniform1f(glGetUniformLocation(waterProgram, "threshold1"), 0.05f);
+  glUniform1f(glGetUniformLocation(waterProgram, "threshold2"), 0.15f);
+  glUniform1f(glGetUniformLocation(waterProgram, "velocityScale"), 0.5f);
+
+  // Draw
   glBindVertexArray(waterVAO);
-  TEST_OPENGL_ERROR();
   glDrawElements(GL_TRIANGLES, waterCount, GL_UNSIGNED_INT, nullptr);
-  TEST_OPENGL_ERROR();
   glBindVertexArray(0);
 
   // Render drop sphere while impacting
@@ -302,6 +333,64 @@ void display()
     TEST_OPENGL_ERROR();
     glBindVertexArray(0);
   }
+
+  // --- Boat position update ---
+  int bx = int((boatPos.x / STEP) + N / 2.0f);
+  int bz = int((boatPos.z / STEP) + N / 2.0f);
+  const auto& heights = sim.getHeight();
+  float hC = heights[bz * (N + 1) + bx];
+  float hL = heights[bz * (N + 1) + std::max(bx - 1, 0)];
+  float hR = heights[bz * (N + 1) + std::min(bx + 1, N)];
+  float hF = heights[std::min(bz + 1, N) * (N + 1) + bx];
+  float hB = heights[std::max(bz - 1, 0) * (N + 1) + bx];
+
+  float dx = (hR - hL) * HEIGHT_SCALE / (2.0f * STEP);
+  float dz = (hF - hB) * HEIGHT_SCALE / (2.0f * STEP);
+
+  float maxAngle = glm::radians(20.0f);
+  float roll  = glm::clamp(-dx, -maxAngle, maxAngle);
+  float pitch = glm::clamp(dz, -maxAngle, maxAngle);
+
+  // Hull parameters
+  float hullLength = 8.0f;
+  float hullHeight = 2.0f;
+  float hullWidth  = 2.5f;
+
+  // Cabin parameters
+  float cabinLength = 1.0f;
+  float cabinHeight = 1.0f;
+  float cabinWidth  = 1.0f;
+
+  // --- Boat transform (hull) ---
+  glm::mat4 boatBase = glm::translate(glm::mat4(1.0f), glm::vec3(boatPos.x, hC * HEIGHT_SCALE, boatPos.z))
+      * glm::rotate(glm::mat4(1.0f), pitch, glm::vec3(1, 0, 0))
+      * glm::rotate(glm::mat4(1.0f), roll,  glm::vec3(0, 0, 1));
+
+  glm::mat4 boatModel = boatBase
+      * glm::scale(glm::mat4(1.0f), glm::vec3(hullLength, hullHeight, hullWidth));
+
+  glUseProgram(dropProgram);
+  glUniformMatrix4fv(glGetUniformLocation(dropProgram, "model"), 1, GL_FALSE, glm::value_ptr(boatModel));
+  glUniformMatrix4fv(glGetUniformLocation(dropProgram, "view"), 1, GL_FALSE, glm::value_ptr(V));
+  glUniformMatrix4fv(glGetUniformLocation(dropProgram, "projection"), 1, GL_FALSE, glm::value_ptr(P));
+  glUniform3f(glGetUniformLocation(dropProgram, "objectColor"), 0.6f, 0.3f, 0.1f); // brown
+  glBindVertexArray(sphereVAO);
+  glDrawElements(GL_TRIANGLES, sphereCount, GL_UNSIGNED_INT, nullptr);
+  glBindVertexArray(0);
+
+  // --- Cabin: place it on top of the hull in local space ---
+  float cabinYOffset = (hullHeight + cabinHeight) * 0.5f; // sits on top
+  float cabinXOffset = 1.5f; // forward on the boat
+
+  glm::mat4 cabinModel = boatBase
+      * glm::translate(glm::mat4(1.0f), glm::vec3(cabinXOffset, cabinYOffset, 0.0f))
+      * glm::scale(glm::mat4(1.0f), glm::vec3(cabinLength, cabinHeight, cabinWidth));
+
+  glUniformMatrix4fv(glGetUniformLocation(dropProgram, "model"), 1, GL_FALSE, glm::value_ptr(cabinModel));
+  glUniform3f(glGetUniformLocation(dropProgram, "objectColor"), 0.8f, 0.8f, 0.8f); // light gray
+  glBindVertexArray(sphereVAO);
+  glDrawElements(GL_TRIANGLES, sphereCount, GL_UNSIGNED_INT, nullptr);
+  glBindVertexArray(0);
 
   glutSwapBuffers();
 }

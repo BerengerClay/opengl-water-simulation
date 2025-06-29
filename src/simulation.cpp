@@ -69,3 +69,12 @@ void Simulation::update()
   std::swap(u, u_new);
   std::swap(v, v_new);
 }
+
+std::vector<float> Simulation::getVelocity() const
+{
+  std::vector<float> velocity;
+  velocity.resize((N+1)*(N+1));
+  for (int i = 0; i < (N+1)*(N+1); ++i)
+      velocity[i] = std::sqrt(u[i]*u[i] + v[i]*v[i]);
+  return velocity;
+}

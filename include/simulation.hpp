@@ -14,6 +14,7 @@ public:
 
   // Accès aux hauteurs
   const std::vector<float> &getHeight() const;
+  std::vector<float> getVelocity() const;
   int getSize() const;
 
 private:

@@ -12,9 +12,9 @@ uniform float   heightScale;  // <-- nouveau
 
 out vec3 FragPos;
 out vec3 Normal;
+out vec2 UV;
 
 void main() {
-    // coordonnées UV [0,1]
     vec2 uv = (aPos.xz / (step * gridSize)) + 0.5;
 
     // récupère la hauteur (peut être négative)
@@ -33,4 +33,5 @@ void main() {
     FragPos = vec3(model * vec4(pos, 1.0));
     Normal  = mat3(transpose(inverse(model))) * n;
     gl_Position = projection * view * model * vec4(pos,1.0);
+    UV = uv;
 }
