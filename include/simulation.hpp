@@ -16,6 +16,7 @@ public:
   const std::vector<float> &getHeight() const;
   std::vector<float> getVelocity() const;
   int getSize() const;
+  std::pair<float, float> getLocalVelocity(int x, int z) const;
 
 private:
   int N;

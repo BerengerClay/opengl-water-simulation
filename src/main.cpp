@@ -30,7 +30,7 @@ static const int N = 128;
 static const float STEP = 1.0f;
 static const float DT = 0.016f;
 static const float DAMPING = 0.995f;
-static const float IMPACT_AMP = -2.0f;
+static const float IMPACT_AMP = -1.5f;
 static const int IMPACT_FRAMES = 20;
 static const float DROP_RADIUS = 5.0f;
 static const float HEIGHT_SCALE = 1.5f;
@@ -59,6 +59,11 @@ glm::vec3 dropPos;
 glm::vec3 boatPos(0.0f, 0.0f, 0.0f);
 glm::vec3 prevBoatPos = boatPos;
 float boatHeading = 0.0f; // in radians, 0 = facing +Z
+
+bool boatMovedByUser = false;
+
+// Velocity vector for the boat
+glm::vec2 boatVelocity(0.0f, 0.0f);
 
 // Forward declarations
 void init_glut(int &argc, char **argv);
@@ -248,13 +253,14 @@ void display()
   else
     impacting = false;
 
-  if (boatPos != prevBoatPos) {
+  if (boatMovedByUser) {
     int bx = int((boatPos.x / STEP) + N / 2.0f);
     int bz = int((boatPos.z / STEP) + N / 2.0f);
-    float boatWaveAmp = -0.5f; // negative for a "dip", positive for a "bump"
+    float boatWaveAmp = -1.0f; // negative for a "dip", positive for a "bump"
     int boatWaveRadius = 3;    // adjust for effect size
     sim.addDrop(bx, bz, boatWaveAmp, boatWaveRadius);
     prevBoatPos = boatPos;
+    boatMovedByUser = false; // reset flag
   }
   
   // Update simulation
@@ -352,6 +358,24 @@ void display()
   int bx = int((boatPos.x / STEP) + N / 2.0f);
   int bz = int((boatPos.z / STEP) + N / 2.0f);
   const auto& heights = sim.getHeight();
+  auto [ux, uz] = sim.getLocalVelocity(bx, bz);
+  float boatDrag = 0.02f; // adjust for effect
+  boatPos.x += ux * boatDrag;
+  boatPos.z += uz * boatDrag;
+
+  // Update boat position with velocity (smooth movement)
+  boatPos.x += boatVelocity.x;
+  boatPos.z += boatVelocity.y;
+
+  // --- Wrap boat position for infinite map effect ---
+  float halfGrid = (N * STEP) / 2.0f;
+  if (boatPos.x < -halfGrid) boatPos.x += N * STEP;
+  if (boatPos.x >  halfGrid) boatPos.x -= N * STEP;
+  if (boatPos.z < -halfGrid) boatPos.z += N * STEP;
+  if (boatPos.z >  halfGrid) boatPos.z -= N * STEP;
+
+  // Apply damping to velocity
+  boatVelocity *= 0.99f; // 0.96~0.99 for more/less friction
 
   // Compute local axes
   float c = cos(boatHeading);
@@ -501,18 +525,20 @@ void mouse_move(int x, int y)
 // ---- Keyboard input callback ----
 void keyboard(unsigned char key, int x, int y)
 {
-    float moveStep = 0.5f;
-    float turnStep = glm::radians(5.0f); // 5 degrees per press
+    float accel = 0.1f; // acceleration per key press
+    float turnStep = glm::radians(5.0f);
 
     switch (key)
     {
-        case 'w': // forward
-            boatPos.x += moveStep * sin(boatHeading);
-            boatPos.z += moveStep * cos(boatHeading);
+        case 'w': // accelerate forward
+            boatVelocity.x += accel * sin(boatHeading);
+            boatVelocity.y += accel * cos(boatHeading);
+            boatMovedByUser = true;
             break;
-        case 's': // backward
-            boatPos.x -= moveStep * sin(boatHeading);
-            boatPos.z -= moveStep * cos(boatHeading);
+        case 's': // accelerate backward
+            boatVelocity.x -= accel * sin(boatHeading);
+            boatVelocity.y -= accel * cos(boatHeading);
+            boatMovedByUser = true;
             break;
         case 'a': // turn left
             boatHeading += turnStep;
@@ -520,5 +546,10 @@ void keyboard(unsigned char key, int x, int y)
         case 'd': // turn right
             boatHeading -= turnStep;
             break;
+    }
+    float maxSpeed = 0.3f; // lower = slower max speed
+    float speed = glm::length(boatVelocity);
+    if (speed > maxSpeed) {
+        boatVelocity = (boatVelocity / speed) * maxSpeed;
     }
 }

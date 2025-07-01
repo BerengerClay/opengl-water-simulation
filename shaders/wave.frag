@@ -33,5 +33,9 @@ void main() {
     //vec3 color = mix(baseColor * diff + specColor * spec + fresColor * fresnel, foamColor, foam);
     vec3 color = baseColor * diff + specColor * spec + fresColor * fresnel;
 
+    vec3 skyColor = vec3(0.4, 0.6, 1.0);
+    float reflectAmount = pow(clamp(Normal.y, 0.0, 1.0), 2.0);
+    color = mix(color, skyColor, 0.4 * (1.0 - reflectAmount));
+
     FragColor = vec4(color, 0.6);
 }

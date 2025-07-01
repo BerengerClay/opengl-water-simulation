@@ -78,3 +78,9 @@ std::vector<float> Simulation::getVelocity() const
       velocity[i] = std::sqrt(u[i]*u[i] + v[i]*v[i]);
   return velocity;
 }
+
+std::pair<float, float> Simulation::getLocalVelocity(int x, int z) const
+{
+    int idx = z * (N + 1) + x;
+    return {u[idx], v[idx]};
+}
