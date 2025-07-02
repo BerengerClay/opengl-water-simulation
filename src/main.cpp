@@ -39,13 +39,18 @@ static const float SPHERE_SIZE = 0.2f;
 // ---- Globals ----
 Simulation sim(N, STEP, DT, DAMPING);
 
-GLuint waterProgram = 0, dropProgram = 0;
+GLuint waterProgram = 0, dropProgram = 0, skyProgram = 0, landProgram = 0;
 GLuint waterVAO = 0, waterVBO = 0;
 int waterCount = 0;
 GLuint heightTex = 0, velocityTex = 0;
 
 GLuint sphereVAO = 0, sphereVBO = 0, sphereEBO = 0;
 int sphereCount = 0;
+
+GLuint skyVAO = 0;
+
+GLuint landVAO = 0, landVBO = 0, landEBO = 0;
+int landIndexCount = 0;
 
 Camera camera(20.0f, -90.0f, 30.0f);
 bool dragging = false;
@@ -72,6 +77,9 @@ void init_GL();
 void init_shaders();
 void init_water_mesh_and_texture();
 void init_drop_mesh();
+void init_sky();
+void init_land();
+void init_land_mesh(float innerRadius, float outerRadius, int segments = 128);
 void window_resize(int w, int h);
 void display();
 void idle();
@@ -92,6 +100,8 @@ int main(int argc, char **argv)
   init_shaders();
   init_water_mesh_and_texture();
   init_drop_mesh();
+  init_sky();
+  init_land();
   glutMainLoop();
   return 0;
 }
@@ -125,7 +135,7 @@ void init_GL()
 {
   glEnable(GL_DEPTH_TEST);
   TEST_OPENGL_ERROR();
-  glClearColor(0.1f, 0.1f, 0.15f, 1.0f);
+  glClearColor(0.45f, 0.7f, 1.0f, 1.0f); // light blue sky
   TEST_OPENGL_ERROR();
 }
 
@@ -136,6 +146,8 @@ void init_shaders()
                                      "../shaders/wave.frag");
   dropProgram = createShaderProgram("../shaders/drop.vert",
                                     "../shaders/drop.frag");
+  skyProgram = createShaderProgram("../shaders/sky.vert", "../shaders/sky.frag");
+  landProgram = createShaderProgram("../shaders/land.vert", "../shaders/land.frag");
 }
 
 // ---- Water mesh & height texture ----
@@ -225,6 +237,53 @@ void init_drop_mesh()
   glBindVertexArray(0);
 }
 
+void init_sky()
+{
+  glGenVertexArrays(1, &skyVAO);
+  TEST_OPENGL_ERROR();
+}
+
+void init_land()
+{
+    float waterRadius = N * STEP * 0.5f;
+    float landRadius = waterRadius + 60.0f; // Increase from 10.0f to 30.0f (or more)
+    init_land_mesh(waterRadius, landRadius, 128);
+}
+
+void init_land_mesh(float innerRadius, float outerRadius, int segments)
+{
+    std::vector<glm::vec3> verts;
+    std::vector<unsigned int> inds;
+
+    for (int i = 0; i <= segments; ++i) {
+        float angle = 2.0f * glm::pi<float>() * i / segments;
+        float x = cos(angle), z = sin(angle);
+        verts.emplace_back(innerRadius * x, 0.0f, innerRadius * z); // inner
+        verts.emplace_back(outerRadius * x, 0.0f, outerRadius * z); // outer
+    }
+    for (int i = 0; i < segments; ++i) {
+        int a = 2 * i, b = 2 * i + 1, c = 2 * (i + 1), d = 2 * (i + 1) + 1;
+        inds.insert(inds.end(), {static_cast<unsigned int>(a), static_cast<unsigned int>(b), static_cast<unsigned int>(c),
+                                 static_cast<unsigned int>(b), static_cast<unsigned int>(d), static_cast<unsigned int>(c)});
+    }
+    landIndexCount = inds.size();
+
+    glGenVertexArrays(1, &landVAO);
+    glGenBuffers(1, &landVBO);
+    glGenBuffers(1, &landEBO);
+
+    glBindVertexArray(landVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, landVBO);
+    glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(glm::vec3), verts.data(), GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glEnableVertexAttribArray(0);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, landEBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, inds.size() * sizeof(unsigned int), inds.data(), GL_STATIC_DRAW);
+
+    glBindVertexArray(0);
+}
+
 // ---- Window resize ----
 void window_resize(int w, int h)
 {
@@ -241,6 +300,11 @@ void idle()
 // ---- Render loop ----
 void display()
 {
+  glm::mat4 M = glm::mat4(1.0f);
+  glm::mat4 V = camera.getViewMatrix();
+  int ww = glutGet(GLUT_WINDOW_WIDTH), hh = glutGet(GLUT_WINDOW_HEIGHT);
+  glm::mat4 P = glm::perspective(glm::radians(45.0f), float(ww) / hh, 0.1f, 500.0f);
+
   // Progressive drop impact
   if (impacting && impactFrame < IMPACT_FRAMES)
   {
@@ -285,6 +349,25 @@ void display()
   // Clear
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+  // Render sky (disable depth write so it doesn't hide water/boat)
+  glDepthMask(GL_FALSE);
+  glUseProgram(skyProgram);
+  glBindVertexArray(skyVAO);
+  glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+  glBindVertexArray(0);
+  glUseProgram(0);
+  glDepthMask(GL_TRUE);
+
+  glUseProgram(landProgram);
+  glm::mat4 landModel = glm::mat4(1.0f);
+  glUniformMatrix4fv(glGetUniformLocation(landProgram, "model"), 1, GL_FALSE, glm::value_ptr(landModel));
+  glUniformMatrix4fv(glGetUniformLocation(landProgram, "view"), 1, GL_FALSE, glm::value_ptr(V));
+  glUniformMatrix4fv(glGetUniformLocation(landProgram, "projection"), 1, GL_FALSE, glm::value_ptr(P));
+  glBindVertexArray(landVAO);
+  glDrawElements(GL_TRIANGLES, landIndexCount, GL_UNSIGNED_INT, nullptr);
+  glBindVertexArray(0);
+  glUseProgram(0);
+
   // Render water
   glUseProgram(waterProgram);
   TEST_OPENGL_ERROR();
@@ -293,13 +376,6 @@ void display()
   GLint locP = glGetUniformLocation(waterProgram, "projection");
   GLint locH = glGetUniformLocation(waterProgram, "heightMap");
   GLint locS = glGetUniformLocation(waterProgram, "heightScale");
-
-  glm::mat4 M = glm::mat4(1.0f);
-  glm::mat4 V = camera.getViewMatrix();
-  int ww = glutGet(GLUT_WINDOW_WIDTH),
-      hh = glutGet(GLUT_WINDOW_HEIGHT);
-  glm::mat4 P = glm::perspective(glm::radians(45.0f),
-                                 float(ww) / hh, 0.1f, 500.0f);
 
   glUniformMatrix4fv(locM, 1, GL_FALSE, glm::value_ptr(M));
   glUniformMatrix4fv(locV, 1, GL_FALSE, glm::value_ptr(V));
