@@ -22,6 +22,7 @@
     if (err != GL_NO_ERROR) std::cerr << "OpenGL ERROR!" << __LINE__ << std::endl;      \
   } while(0)
 
+// variables globales
 static const int N = 128;
 static const float STEP = 1.0f;
 static const float DT = 0.016f;
@@ -63,6 +64,7 @@ bool boatMovedByUser = false;
 
 glm::vec2 boatVelocity(0.0f, 0.0f);
 
+// Prototypes des fonctions
 void init_glut(int &argc, char **argv);
 bool init_glew();
 void init_GL();
@@ -255,6 +257,7 @@ void display()
   int ww = glutGet(GLUT_WINDOW_WIDTH), hh = glutGet(GLUT_WINDOW_HEIGHT);
   glm::mat4 P = glm::perspective(glm::radians(45.0f), float(ww) / hh, 0.1f, 500.0f);
 
+  // création de la vague
   if (impacting && impactFrame < IMPACT_FRAMES)
   {
     float a = IMPACT_AMP * (impactFrame / float(IMPACT_FRAMES));
@@ -266,6 +269,7 @@ void display()
   else
     impacting = false;
 
+  // mouvement du bateau
   if (boatMovedByUser) {
     int bx = int((boatPos.x / STEP) + N / 2.0f);
     int bz = int((boatPos.z / STEP) + N / 2.0f);
@@ -287,7 +291,8 @@ void display()
   glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, N + 1, N + 1,
                   GL_RED, GL_FLOAT, sim.getVelocity().data()); TEST_OPENGL_ERROR();
   glBindTexture(GL_TEXTURE_2D, 0); TEST_OPENGL_ERROR();
-
+  
+  // openGL pour le ciel
   glDepthMask(GL_FALSE); TEST_OPENGL_ERROR();
   glUseProgram(skyProgram); TEST_OPENGL_ERROR();
   glBindVertexArray(skyVAO); TEST_OPENGL_ERROR();
@@ -296,6 +301,7 @@ void display()
   glUseProgram(0); TEST_OPENGL_ERROR();
   glDepthMask(GL_TRUE); TEST_OPENGL_ERROR();
 
+  // openGL pour la terre
   glUseProgram(landProgram); TEST_OPENGL_ERROR();
   glUniformMatrix4fv(glGetUniformLocation(landProgram, "model"), 1, GL_FALSE, glm::value_ptr(M)); TEST_OPENGL_ERROR();
   glUniformMatrix4fv(glGetUniformLocation(landProgram, "view"), 1, GL_FALSE, glm::value_ptr(V)); TEST_OPENGL_ERROR();
@@ -305,6 +311,8 @@ void display()
   glBindVertexArray(0); TEST_OPENGL_ERROR();
   glUseProgram(0); TEST_OPENGL_ERROR();
 
+  // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); TEST_OPENGL_ERROR();
+  // openGL pour l'eau
   glUseProgram(waterProgram); TEST_OPENGL_ERROR();
 
   glUniformMatrix4fv(glGetUniformLocation(waterProgram, "model"), 1, GL_FALSE, glm::value_ptr(M)); TEST_OPENGL_ERROR();
@@ -327,6 +335,7 @@ void display()
   glDrawElements(GL_TRIANGLES, waterCount, GL_UNSIGNED_INT, nullptr); TEST_OPENGL_ERROR();
   glBindVertexArray(0); TEST_OPENGL_ERROR();
 
+  // openGL pour les vagues
   if (impactFrame < IMPACT_FRAMES)
   {
     glUseProgram(dropProgram); TEST_OPENGL_ERROR();
@@ -340,6 +349,7 @@ void display()
     glBindVertexArray(0); TEST_OPENGL_ERROR();
   }
 
+  // infos sur le bateau
   int bx = int((boatPos.x / STEP) + N / 2.0f);
   int bz = int((boatPos.z / STEP) + N / 2.0f);
   const auto& heights = sim.getHeight();
@@ -403,6 +413,7 @@ void display()
   glm::mat4 boatModel = boatBase
       * glm::scale(glm::mat4(1.0f), glm::vec3(hullLength, hullHeight, hullWidth));
 
+  // openGL pour le bateau
   glUseProgram(dropProgram); TEST_OPENGL_ERROR();
   glUniformMatrix4fv(glGetUniformLocation(dropProgram, "model"), 1, GL_FALSE, glm::value_ptr(boatModel)); TEST_OPENGL_ERROR();
   glUniformMatrix4fv(glGetUniformLocation(dropProgram, "view"), 1, GL_FALSE, glm::value_ptr(V)); TEST_OPENGL_ERROR();
