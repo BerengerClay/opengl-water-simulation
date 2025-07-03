@@ -1,5 +1,7 @@
-#version 330 core
+#version 450
+
 out vec2 UV;
+
 void main() {
     vec2 pos[4] = vec2[](
         vec2(-1, -1),

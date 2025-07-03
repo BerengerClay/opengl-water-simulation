@@ -8,7 +8,6 @@ std::tuple<GLuint, GLuint, int> createGridVAO(int N, float step)
   std::vector<unsigned int> indices;
   vertices.reserve((N + 1) * (N + 1));
 
-  // Création des sommets
   for (int y = 0; y <= N; ++y)
   {
     for (int x = 0; x <= N; ++x)
@@ -18,7 +17,6 @@ std::tuple<GLuint, GLuint, int> createGridVAO(int N, float step)
       vertices.emplace_back(xpos, 0.0f, zpos);
     }
   }
-  // Création des indices
   for (int y = 0; y < N; ++y)
   {
     for (int x = 0; x < N; ++x)
@@ -33,7 +31,6 @@ std::tuple<GLuint, GLuint, int> createGridVAO(int N, float step)
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
-  // VBO positions (dynamic)
   glGenBuffers(1, &vbo);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
   glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3),
@@ -41,32 +38,10 @@ std::tuple<GLuint, GLuint, int> createGridVAO(int N, float step)
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
   glEnableVertexAttribArray(0);
 
-  // EBO indices
   glGenBuffers(1, &ebo);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int),
                indices.data(), GL_STATIC_DRAW);
 
   return {vao, vbo, static_cast<int>(indices.size())};
-}
-
-void updateVertexHeights(GLuint vbo, int N, float step,
-                         const std::vector<float> &heights)
-{
-  std::vector<glm::vec3> verts;
-  verts.reserve((N + 1) * (N + 1));
-  for (int y = 0; y <= N; ++y)
-  {
-    for (int x = 0; x <= N; ++x)
-    {
-      float xpos = (x - N / 2.0f) * step;
-      float ypos = heights[y * (N + 1) + x];
-      float zpos = (y - N / 2.0f) * step;
-      verts.emplace_back(xpos, ypos, zpos);
-    }
-  }
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferSubData(GL_ARRAY_BUFFER, 0,
-                  verts.size() * sizeof(glm::vec3),
-                  verts.data());
 }

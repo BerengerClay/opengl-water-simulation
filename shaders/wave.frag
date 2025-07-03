@@ -1,17 +1,15 @@
-// shaders/wave.frag
-#version 330 core
+#version 450
 
 in  vec3 FragPos;
 in  vec3 Normal;
 in  vec2 UV;
-in  float FoamIntensity;      // intensité de mousse
+in  float FoamIntensity;
 
 uniform vec3 viewPos;
 
 out vec4 FragColor;
 
 void main() {
-    // Phong basique
     vec3 lightDir   = normalize(vec3(1.0, 1.0, 0.5));
     vec3 viewDir    = normalize(viewPos - FragPos);
     vec3 reflectDir = reflect(-lightDir, Normal);
@@ -28,11 +26,9 @@ void main() {
                + specColor * spec
                + fresColor * fres;
 
-    // Mélange avec la mousse (blanc) selon FoamIntensity
     vec3 foamColor = vec3(1.0);
     color = mix(color, foamColor, clamp(FoamIntensity, 0.0, 1.0));
 
-    // Réflexion partielle du ciel
     vec3 skyColor = vec3(0.4, 0.6, 1.0);
     float reflAmt = pow(clamp(Normal.y, 0.0, 1.0), 2.0);
     color = mix(color, skyColor, 0.4 * (1.0 - reflAmt));

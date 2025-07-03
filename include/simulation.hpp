@@ -6,13 +6,10 @@ class Simulation
 public:
   Simulation(int size, float dx, float dt, float damping = 0.99f);
 
-  // Met à jour u,v,h sur la grille selon SWE
   void update();
 
-  // Ajoute une goutte gaussienne
   void addDrop(int x, int y, float amplitude, int radius = 3);
 
-  // Accès aux hauteurs
   const std::vector<float> &getHeight() const;
   std::vector<float> getVelocity() const;
   int getSize() const;
