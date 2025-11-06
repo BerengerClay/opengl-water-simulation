@@ -1,5 +1,11 @@
 # 🌊 OpenGL Water Simulation : Rendu Dynamique et Modélisation Physique de l'Eau
 
+## 📸 Aperçu Visuel
+
+![Démonstration de la simulation des vagues en temps réel](data/bateau_total.gif)
+
+---
+
 ## 🌟 Présentation du Projet et Contexte Académique
 
 Ce projet est un simulateur graphique en temps réel des surfaces marines, développé en **C++** et **OpenGL**. Il modélise la dynamique de l'eau et applique des techniques de rendu avancées pour un affichage réaliste.
